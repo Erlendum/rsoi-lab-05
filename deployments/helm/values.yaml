@@ -1,0 +1,18 @@
+ame: service
+namespace: erlendum
+
+replicaCount: 1
+
+image:
+  repository: erlendum
+  tag: latest
+
+postgresql:
+  dsn: ""
+
+services:
+  library-system: http://library-system
+  rating-system: http://rating-system
+  reservation-system: http://reservation-system
+
+port: 80

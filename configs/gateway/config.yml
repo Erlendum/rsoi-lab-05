@@ -1,0 +1,6 @@
+server:
+  address: ":80"
+  shutdown_timeout: 20s
+reservation_system_url: "http://103.74.94.186:31236/erlendum/reservation-system/api/v1"
+library_system_url: "http://103.74.94.186:31236/erlendum/library-system/api/v1"
+rating_system_url: "http://103.74.94.186:31236/erlendum/rating-system/api/v1"

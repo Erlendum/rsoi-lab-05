@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "helm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "helm.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: service
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          command:
+            - /go/bin/{{ .Values.name }}
+          imagePullPolicy: Always
+          env:
+            - name: POSTGRESQL_DSN
+              value: {{ quote .Values.postgresql.dsn }}

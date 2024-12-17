@@ -1,0 +1,3 @@
+server:
+  address: ":80"
+  shutdown_timeout: 20s
