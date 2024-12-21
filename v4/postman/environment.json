@@ -4,32 +4,32 @@
   "values": [
     {
       "key": "serviceUrl",
-      "value": "",
+      "value": "http://103.74.94.186:31236/erlendum/gateway",
       "enabled": true
     },
     {
       "key": "identityProviderUrl",
-      "value": "",
+      "value": "http://103.74.94.186:30873/realms/Parasha/protocol/openid-connect/token",
       "enabled": true
     },
     {
       "key": "username",
-      "value": "",
+      "value": "user",
       "enabled": true
     },
     {
       "key": "password",
-      "value": "",
+      "value": "Pass1234",
       "enabled": true
     },
     {
       "key": "clientId",
-      "value": "",
+      "value": "parasha",
       "enabled": true
     },
     {
       "key": "clientSecret",
-      "value": "",
+      "value": "uOPuWod6AualjJl6Hlejnp6jrbI8qVVc",
       "enabled": true
     }
   ],

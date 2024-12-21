@@ -1,0 +1,43 @@
+name: Deploy service
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        required: true
+        type: string
+    secrets:
+      POSTGRESQL_DSN:
+        required: true
+      KUBECONFIG:
+        required: true
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: azure/k8s-set-context@v1
+        name: Set K8s context
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - uses: azure/setup-kubectl@v4
+        name: Setup kubectl
+
+      - uses: azure/setup-helm@v4.2.0
+        name: Setup helm
+
+      - name: Helm chart install
+        run: >
+          helm upgrade --install --create-namespace --namespace erlendum
+          --set 'image.tag=latest'
+          --set 'postgresql.dsn=${{ secrets.POSTGRESQL_DSN }}'
+          --dependency-update
+          -f  deployments/${{ inputs.service-name }}/values.yaml
+          ${{ inputs.service-name }} deployments/helm
+
