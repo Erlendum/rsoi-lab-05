@@ -1,3 +1,4 @@
 server:
   address: ":80"
   shutdown_timeout: 20s
+jwks_uri: "http://103.74.94.186:30873/realms/Parasha/protocol/openid-connect/certs"

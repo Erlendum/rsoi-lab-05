@@ -17,6 +17,7 @@ type Config struct {
 	ReservationSystemURL string `yaml:"reservation_system_url"`
 	LibrarySystemURL     string `yaml:"library_system_url"`
 	RatingSystemURL      string `yaml:"rating_system_url"`
+	JWKSURI              string `yaml:"jwks_uri"`
 }
 
 func New() (*Config, error) {

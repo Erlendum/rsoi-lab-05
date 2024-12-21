@@ -47,7 +47,7 @@ func (r *root) Register(ctx context.Context) error {
 
 	ratingRepo := rating.NewRepository(psqldb)
 
-	personHandler := rating.NewHandler(ratingRepo)
+	personHandler := rating.NewHandler(ratingRepo, r.cfg)
 
 	r.server = http.NewServer(&r.cfg.Server, personHandler)
 

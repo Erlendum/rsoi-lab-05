@@ -2,6 +2,7 @@ package reservation
 
 import (
 	"errors"
+	"github.com/Erlendum/rsoi-lab-02/pkg/auth"
 	"github.com/Erlendum/rsoi-lab-02/pkg/validation"
 	"github.com/go-playground/validator/v10"
 	"github.com/golang/mock/gomock"
@@ -129,7 +130,8 @@ func Test_UpdateReservationStatus(t *testing.T) {
 			c := e.NewContext(req, rec)
 			c.SetParamNames("uid")
 			c.SetParamValues(tt.fields.reservationUid)
-			c.Request().Header.Set("X-User-Name", tt.fields.username)
+			ctx := auth.SetUser(c.Request().Context(), tt.fields.username)
+			c.SetRequest(c.Request().WithContext(ctx))
 
 			err := h.UpdateReservationStatus(c)
 

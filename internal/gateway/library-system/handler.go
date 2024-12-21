@@ -2,10 +2,12 @@ package library_system
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Erlendum/rsoi-lab-02/internal/gateway/config"
+	"github.com/Erlendum/rsoi-lab-02/pkg/auth"
 	my_time "github.com/Erlendum/rsoi-lab-02/pkg/time"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
@@ -74,12 +76,19 @@ func compareConditions(a, b string) (int, error) {
 func (h *handler) Register(echo *echo.Echo) {
 	api := echo.Group("/api/v1")
 
+	api.Use(auth.Middleware(h.config.JWKSURI))
+
 	api.GET("/libraries", h.GetLibraries)
 	api.GET("/libraries/:libraryUid/books", h.GetBooksByLibrary)
 	api.GET("/reservations", h.GetBooksByUser)
 	api.POST("/reservations", h.ReserveBookByUser)
 	api.POST("/reservations/:reservationUid/return", h.ReturnBookByUser)
 	api.GET("/rating", h.GetRatingByUser)
+}
+
+func (h *handler) setToken(ctx context.Context, req *http.Request) {
+	token := auth.GetToken(ctx)
+	req.Header.Set("Authorization", "Bearer "+token)
 }
 
 func (h *handler) GetLibraries(c echo.Context) error {
@@ -100,6 +109,8 @@ func (h *handler) GetLibraries(c echo.Context) error {
 		log.Err(err).Msg("failed to process request to library service")
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "failed to process request"})
 	}
+
+	h.setToken(c.Request().Context(), req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -136,6 +147,8 @@ func (h *handler) GetBooksByLibrary(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "failed to process request"})
 	}
 
+	h.setToken(c.Request().Context(), req)
+
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		log.Err(err).Msg("failed to process request to library service")
@@ -159,7 +172,7 @@ type bookResp struct {
 	Genre   string `json:"genre"`
 }
 
-func (h *handler) getBooksByUids(uids []string) (map[string]bookResp, error) {
+func (h *handler) getBooksByUids(ctx context.Context, uids []string) (map[string]bookResp, error) {
 	reqURL, err := url.Parse(h.config.LibrarySystemURL + "/books/")
 	if err != nil {
 		return nil, err
@@ -175,6 +188,8 @@ func (h *handler) getBooksByUids(uids []string) (map[string]bookResp, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	h.setToken(ctx, req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -210,7 +225,7 @@ type libraryResp struct {
 	City       string `json:"city"`
 }
 
-func (h *handler) getLibrariesByUids(uids []string) (map[string]libraryResp, error) {
+func (h *handler) getLibrariesByUids(ctx context.Context, uids []string) (map[string]libraryResp, error) {
 	reqURL, err := url.Parse(h.config.LibrarySystemURL + "/libraries/by-uids")
 	if err != nil {
 		return nil, err
@@ -226,6 +241,8 @@ func (h *handler) getLibrariesByUids(uids []string) (map[string]libraryResp, err
 	if err != nil {
 		return nil, err
 	}
+
+	h.setToken(ctx, req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -264,7 +281,7 @@ type reservationResp struct {
 	LibraryUid     string `json:"libraryUid"`
 }
 
-func (h *handler) getReservationsByUser(userName string) ([]reservationResp, int, error) {
+func (h *handler) getReservationsByUser(ctx context.Context, userName string) ([]reservationResp, int, error) {
 	reqURL, err := url.Parse(h.config.ReservationSystemURL + "/reservations/by-user/" + userName)
 	if err != nil {
 		return nil, 0, err
@@ -278,6 +295,8 @@ func (h *handler) getReservationsByUser(userName string) ([]reservationResp, int
 	if err != nil {
 		return nil, 0, err
 	}
+
+	h.setToken(ctx, req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -302,11 +321,13 @@ func (h *handler) getReservationsByUser(userName string) ([]reservationResp, int
 	return reservations, http.StatusOK, nil
 }
 
-func (h *handler) getReservationsByUid(uid string) (int, []byte, error) {
+func (h *handler) getReservationsByUid(ctx context.Context, uid string) (int, []byte, error) {
 	req, err := http.NewRequest(http.MethodGet, h.config.ReservationSystemURL+"/reservations/"+uid, nil)
 	if err != nil {
 		return 0, nil, err
 	}
+
+	h.setToken(ctx, req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -326,7 +347,7 @@ func (h *handler) getReservationsByUid(uid string) (int, []byte, error) {
 }
 
 func (h *handler) GetBooksByUser(c echo.Context) error {
-	reservations, statusCode, err := h.getReservationsByUser(c.Request().Header.Get("X-User-Name"))
+	reservations, statusCode, err := h.getReservationsByUser(c.Request().Context(), auth.GetUser(c.Request().Context()))
 	if err != nil {
 		log.Err(err).Msg("failed to process request to reservation service")
 		if errors.Is(err, errNotOkStatusCode) {
@@ -342,13 +363,13 @@ func (h *handler) GetBooksByUser(c echo.Context) error {
 		librariesUids = append(librariesUids, r.LibraryUid)
 	}
 
-	booksMap, err := h.getBooksByUids(booksUids)
+	booksMap, err := h.getBooksByUids(c.Request().Context(), booksUids)
 	if err != nil {
 		log.Err(err).Msg("failed to process request to library service")
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "failed to process request"})
 	}
 
-	librariesMap, err := h.getLibrariesByUids(librariesUids)
+	librariesMap, err := h.getLibrariesByUids(c.Request().Context(), librariesUids)
 	if err != nil {
 		log.Err(err).Msg("failed to process request to library service")
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "failed to process request"})
@@ -378,7 +399,7 @@ func (h *handler) GetBooksByUser(c echo.Context) error {
 	return c.JSON(http.StatusOK, reservationsExtended)
 }
 
-func (h *handler) createUser(userName string) (int, []byte, error) {
+func (h *handler) createUser(ctx context.Context, userName string) (int, []byte, error) {
 	type createUserReq struct {
 		UserName string `json:"userName"`
 	}
@@ -392,6 +413,8 @@ func (h *handler) createUser(userName string) (int, []byte, error) {
 	if err != nil {
 		return 0, nil, err
 	}
+
+	h.setToken(ctx, req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -410,12 +433,12 @@ func (h *handler) createUser(userName string) (int, []byte, error) {
 	return resp.StatusCode, body, nil
 }
 
-func (h *handler) createReservation(reqBody []byte, userName string) (int, []byte, error) {
+func (h *handler) createReservation(ctx context.Context, reqBody []byte, userName string) (int, []byte, error) {
 	req, err := http.NewRequest(http.MethodPost, h.config.ReservationSystemURL+"/reservations/", bytes.NewBuffer(reqBody))
 	if err != nil {
 		return 0, nil, err
 	}
-	req.Header.Set("X-User-Name", userName)
+	h.setToken(ctx, req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -435,7 +458,7 @@ func (h *handler) createReservation(reqBody []byte, userName string) (int, []byt
 }
 
 func (h *handler) ReserveBookByUser(c echo.Context) error {
-	reservations, statusCode, err := h.getReservationsByUser(c.Request().Header.Get("X-User-Name"))
+	reservations, statusCode, err := h.getReservationsByUser(c.Request().Context(), auth.GetUser(c.Request().Context()))
 	if err != nil {
 		log.Err(err).Msg("failed to process request to reservation service")
 		if errors.Is(err, errNotOkStatusCode) {
@@ -444,7 +467,7 @@ func (h *handler) ReserveBookByUser(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "failed to process request"})
 	}
 
-	statusCode, body, err := h.getRatingByUser(c.Request().Header.Get("X-User-Name"))
+	statusCode, body, err := h.getRatingByUser(c.Request().Context(), auth.GetUser(c.Request().Context()))
 	if err != nil && !errors.Is(err, errNotOkStatusCode) {
 		log.Err(err).Msg("failed to process request to rating service")
 		return c.JSON(http.StatusServiceUnavailable, echo.Map{"message": "Bonus Service unavailable"})
@@ -457,7 +480,7 @@ func (h *handler) ReserveBookByUser(c echo.Context) error {
 	stars := 0
 	// если пользователь не найден, создаем его
 	if statusCode == http.StatusNotFound {
-		statusCode, body, err = h.createUser(c.Request().Header.Get("X-User-Name"))
+		statusCode, body, err = h.createUser(c.Request().Context(), auth.GetUser(c.Request().Context()))
 		if err != nil {
 			log.Err(err).Msg("failed to process request to rating service")
 			if errors.Is(err, errNotOkStatusCode) {
@@ -501,7 +524,7 @@ func (h *handler) ReserveBookByUser(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "failed to parse request"})
 	}
 
-	statusCode, body, err = h.createReservation(reqBody, c.Request().Header.Get("X-User-Name"))
+	statusCode, body, err = h.createReservation(c.Request().Context(), reqBody, auth.GetUser(c.Request().Context()))
 	if err != nil {
 		log.Err(err).Msg("failed to process request to reservation service")
 		if errors.Is(err, errNotOkStatusCode) {
@@ -526,7 +549,7 @@ func (h *handler) ReserveBookByUser(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "failed to process request"})
 	}
 
-	statusCode, body, err = h.updateAvailableCount(createdReservation.LibraryUid, createdReservation.BookUid, -1)
+	statusCode, body, err = h.updateAvailableCount(c.Request().Context(), createdReservation.LibraryUid, createdReservation.BookUid, -1)
 	if err != nil {
 		log.Err(err).Msg("failed to process request to library service")
 		if errors.Is(err, errNotOkStatusCode) {
@@ -547,13 +570,13 @@ func (h *handler) ReserveBookByUser(c echo.Context) error {
 		} `json:"rating"`
 	}
 
-	books, err := h.getBooksByUids([]string{createdReservation.BookUid})
+	books, err := h.getBooksByUids(c.Request().Context(), []string{createdReservation.BookUid})
 	if err != nil {
 		log.Err(err).Msg("failed to process request to library service")
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "failed to process request"})
 	}
 
-	libraries, err := h.getLibrariesByUids([]string{createdReservation.LibraryUid})
+	libraries, err := h.getLibrariesByUids(c.Request().Context(), []string{createdReservation.LibraryUid})
 	if err != nil {
 		log.Err(err).Msg("failed to process request to library service")
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "failed to process request"})
@@ -574,12 +597,14 @@ func (h *handler) ReserveBookByUser(c echo.Context) error {
 	})
 }
 
-func (h *handler) updateAvailableCount(libraryUid, bookUid string, countDiff int) (int, []byte, error) {
+func (h *handler) updateAvailableCount(ctx context.Context, libraryUid, bookUid string, countDiff int) (int, []byte, error) {
 	req, err := http.NewRequest(http.MethodPut, h.config.LibrarySystemURL+"/libraries/"+libraryUid+"/books/"+bookUid+"?countDiff="+strconv.Itoa(countDiff), nil)
 	if err != nil {
 		return 0, nil, err
 	}
 
+	h.setToken(ctx, req)
+
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		return 0, nil, err
@@ -597,12 +622,12 @@ func (h *handler) updateAvailableCount(libraryUid, bookUid string, countDiff int
 	return resp.StatusCode, body, nil
 }
 
-func (h *handler) updateReservationStatus(reservationUid, status, username string) (int, []byte, error) {
+func (h *handler) updateReservationStatus(ctx context.Context, reservationUid, status, username string) (int, []byte, error) {
 	req, err := http.NewRequest(http.MethodPut, h.config.ReservationSystemURL+"/reservations/"+reservationUid+"/status?status="+status, nil)
 	if err != nil {
 		return 0, nil, err
 	}
-	req.Header.Set("X-User-Name", username)
+	h.setToken(ctx, req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -621,11 +646,13 @@ func (h *handler) updateReservationStatus(reservationUid, status, username strin
 	return resp.StatusCode, body, nil
 }
 
-func (h *handler) updateUserRating(username string, starsDiff int) (int, []byte, error) {
+func (h *handler) updateUserRating(ctx context.Context, username string, starsDiff int) (int, []byte, error) {
 	req, err := http.NewRequest(http.MethodPut, h.config.RatingSystemURL+"/rating/"+username+"?starsDiff="+strconv.Itoa(starsDiff), nil)
 	if err != nil {
 		return 0, nil, err
 	}
+
+	h.setToken(ctx, req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -645,7 +672,7 @@ func (h *handler) updateUserRating(username string, starsDiff int) (int, []byte,
 }
 
 func (h *handler) ReturnBookByUser(c echo.Context) error {
-	statusCode, body, err := h.getReservationsByUid(c.Param("reservationUid"))
+	statusCode, body, err := h.getReservationsByUid(c.Request().Context(), c.Param("reservationUid"))
 	if err != nil {
 		log.Err(err).Msg("failed to process request to reservation service")
 		if errors.Is(err, errNotOkStatusCode) {
@@ -700,7 +727,7 @@ func (h *handler) ReturnBookByUser(c echo.Context) error {
 		starsDiff = 1
 	}
 
-	statusCode, body, err = h.updateReservationStatus(reservation.ReservationUid, targetStatus, c.Request().Header.Get("X-User-Name"))
+	statusCode, body, err = h.updateReservationStatus(c.Request().Context(), reservation.ReservationUid, targetStatus, auth.GetUser(c.Request().Context()))
 	if err != nil {
 		log.Err(err).Msg("failed to process request to reservation service")
 		if errors.Is(err, errNotOkStatusCode) {
@@ -709,7 +736,7 @@ func (h *handler) ReturnBookByUser(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "failed to process request"})
 	}
 
-	statusCode, body, err = h.updateAvailableCount(reservation.LibraryUid, reservation.BookUid, 1)
+	statusCode, body, err = h.updateAvailableCount(c.Request().Context(), reservation.LibraryUid, reservation.BookUid, 1)
 	if err != nil {
 		log.Err(err).Msg("failed to process request to library service")
 		if errors.Is(err, errNotOkStatusCode) {
@@ -718,7 +745,7 @@ func (h *handler) ReturnBookByUser(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "failed to process request"})
 	}
 
-	statusCode, body, err = h.updateUserRating(c.Request().Header.Get("X-User-Name"), starsDiff)
+	statusCode, body, err = h.updateUserRating(c.Request().Context(), auth.GetUser(c.Request().Context()), starsDiff)
 	if err != nil {
 		log.Err(err).Msg("failed to process request to rating service")
 		if errors.Is(err, errNotOkStatusCode) {
@@ -730,11 +757,12 @@ func (h *handler) ReturnBookByUser(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *handler) getRatingByUser(userName string) (int, []byte, error) {
+func (h *handler) getRatingByUser(ctx context.Context, userName string) (int, []byte, error) {
 	req, err := http.NewRequest(http.MethodGet, h.config.RatingSystemURL+"/rating/"+userName, nil)
 	if err != nil {
 		return 0, nil, err
 	}
+	h.setToken(ctx, req)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -754,7 +782,7 @@ func (h *handler) getRatingByUser(userName string) (int, []byte, error) {
 }
 
 func (h *handler) GetRatingByUser(c echo.Context) error {
-	statusCode, body, err := h.getRatingByUser(c.Request().Header.Get("X-User-Name"))
+	statusCode, body, err := h.getRatingByUser(c.Request().Context(), auth.GetUser(c.Request().Context()))
 	if err != nil {
 		log.Err(err).Msg("failed to process request to rating service")
 		if errors.Is(err, errNotOkStatusCode) {

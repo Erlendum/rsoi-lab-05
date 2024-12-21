@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Erlendum/rsoi-lab-02/internal/reservation-system/config"
+	"github.com/Erlendum/rsoi-lab-02/pkg/auth"
 	my_time "github.com/Erlendum/rsoi-lab-02/pkg/time"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -28,15 +30,17 @@ type storage interface {
 
 type handler struct {
 	storage storage
+	config  *config.Config
 }
 
-func NewHandler(storage storage) *handler {
-	return &handler{storage: storage}
+func NewHandler(storage storage, config *config.Config) *handler {
+	return &handler{storage: storage, config: config}
 }
 
 func (h *handler) Register(echo *echo.Echo) {
 	api := echo.Group("/api/v1")
 
+	api.Use(auth.Middleware(h.config.JWKURI))
 	api.GET("/reservations/by-user/:username", h.GetReservations)
 	api.GET("/reservations/:uid", h.GetReservationByUid)
 	api.POST("/reservations/", h.CreateReservation)
@@ -134,7 +138,7 @@ func (h *handler) GetReservationByUid(c echo.Context) error {
 }
 
 func (h *handler) CreateReservation(c echo.Context) error {
-	username := c.Request().Header.Get("X-User-Name")
+	username := auth.GetUser(c.Request().Context())
 	if username == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{
 			"message": "username is wrong",
@@ -202,7 +206,7 @@ func (h *handler) CreateReservation(c echo.Context) error {
 }
 
 func (h *handler) UpdateReservationStatus(c echo.Context) error {
-	username := c.Request().Header.Get("X-User-Name")
+	username := auth.GetUser(c.Request().Context())
 	if username == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{
 			"message": "username is wrong",

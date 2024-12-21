@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Erlendum/rsoi-lab-02/internal/rating-system/config"
+	"github.com/Erlendum/rsoi-lab-02/pkg/auth"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
 	"io"
@@ -21,14 +23,16 @@ type storage interface {
 
 type handler struct {
 	storage storage
+	config  *config.Config
 }
 
-func NewHandler(storage storage) *handler {
-	return &handler{storage: storage}
+func NewHandler(storage storage, config *config.Config) *handler {
+	return &handler{storage: storage, config: config}
 }
 
 func (h *handler) Register(echo *echo.Echo) {
 	api := echo.Group("/api/v1")
+	api.Use(auth.Middleware(h.config.JWKURI))
 
 	api.GET("/rating/:username", h.GetRatingRecord)
 	api.POST("/rating", h.CreateRatingRecord)

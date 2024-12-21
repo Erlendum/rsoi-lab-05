@@ -47,7 +47,7 @@ func (r *root) Register(ctx context.Context) error {
 
 	reservationRepo := reservation.NewRepository(psqldb)
 
-	reservationHandler := reservation.NewHandler(reservationRepo)
+	reservationHandler := reservation.NewHandler(reservationRepo, r.cfg)
 
 	r.server = http.NewServer(&r.cfg.Server, reservationHandler)
 

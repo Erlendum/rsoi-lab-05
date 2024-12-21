@@ -19,6 +19,7 @@ type PostgreSQL struct {
 type Config struct {
 	Server     Server `yaml:"server"`
 	PostgreSQL PostgreSQL
+	JWKURI     string `yaml:"jwks_uri"`
 }
 
 func New() (*Config, error) {

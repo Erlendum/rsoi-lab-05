@@ -47,7 +47,7 @@ func (r *root) Register(ctx context.Context) error {
 
 	libraryRepo := library.NewRepository(psqldb)
 
-	libraryHandler := library.NewHandler(libraryRepo)
+	libraryHandler := library.NewHandler(libraryRepo, r.cfg)
 
 	r.server = http.NewServer(&r.cfg.Server, libraryHandler)
 
